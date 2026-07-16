@@ -1,13 +1,16 @@
+Exit code: 0
+Wall time: 2 seconds
+Output:
 // Bump this whenever the app shell changes so returning families do not stay
 // on an older cached JavaScript bundle after a production deployment.
-const CACHE_NAME = 'orbit-oak-v5';
+const CACHE_NAME = 'orbit-oak-v6';
 const APP_SHELL = [
   './',
   './index.html',
-  './styles.css?version=5',
+  './styles.css?version=6',
   './manifest.webmanifest',
   './assets/icon.svg',
-  './src/app-v5.js?version=5',
+  './src/app-v5.js?version=6',
   './src/state.js',
   './src/data/missions.js',
   './src/integrations/supabase-config.js',
