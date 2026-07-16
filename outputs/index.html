@@ -17,6 +17,15 @@
       const boot = async () => {
         if ('serviceWorker' in navigator) {
           try {
+            const refreshKey = 'orbit-oak-service-worker-refresh-v5';
+            if (navigator.serviceWorker.controller && sessionStorage.getItem(refreshKey) !== 'done') {
+              sessionStorage.setItem(refreshKey, 'done');
+              const registrations = await navigator.serviceWorker.getRegistrations();
+              await Promise.all(registrations.map((registration) => registration.unregister()));
+              window.location.reload();
+              return;
+            }
+            sessionStorage.removeItem(refreshKey);
             const registration = await navigator.serviceWorker.register('./sw.js?version=5');
             await registration.update();
             const installing = registration.installing;
@@ -39,4 +48,3 @@
     </script>
   </body>
 </html>
-
