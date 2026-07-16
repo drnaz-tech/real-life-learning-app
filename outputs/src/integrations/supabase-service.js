@@ -21,13 +21,19 @@ const requireClient = () => {
   return supabase;
 };
 
+const appBaseUrl = () => new URL('./', window.location.href).href;
+
 export const authApi = {
   observe: (callback) => supabase
     ? supabase.auth.onAuthStateChange((_event, session) => callback(session?.user || null, session))
     : { data: { subscription: { unsubscribe() {} } } },
-  registerParent: (email, password) => requireClient().auth.signUp({ email, password }),
+  registerParent: (email, password) => requireClient().auth.signUp({
+    email,
+    password,
+    options: { emailRedirectTo: appBaseUrl() }
+  }),
   signInParent: (email, password) => requireClient().auth.signInWithPassword({ email, password }),
-  sendPasswordReset: (email, redirectTo = window.location.origin) => requireClient().auth.resetPasswordForEmail(email, { redirectTo }),
+  sendPasswordReset: (email, redirectTo = appBaseUrl()) => requireClient().auth.resetPasswordForEmail(email, { redirectTo }),
   signOut: () => requireClient().auth.signOut()
 };
 
