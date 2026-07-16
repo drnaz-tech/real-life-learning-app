@@ -1,6 +1,3 @@
-Exit code: 0
-Wall time: 2.2 seconds
-Output:
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { supabaseConfig } from './supabase-config.js';
 
