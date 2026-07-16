@@ -1,0 +1,4 @@
+node_modules/
+.firebase/
+src/integrations/firebase-config.js
+firebase-debug.log
