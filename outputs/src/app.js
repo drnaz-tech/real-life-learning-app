@@ -284,6 +284,6 @@ startAuthObserver();
 render();
 
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js?version=3').catch(() => {}));
+  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js?version=4').catch(() => {}));
 }
 

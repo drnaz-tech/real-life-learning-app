@@ -1,13 +1,13 @@
 // Bump this whenever the app shell changes so returning families do not stay
 // on an older cached JavaScript bundle after a production deployment.
-const CACHE_NAME = 'orbit-oak-v3';
+const CACHE_NAME = 'orbit-oak-v4';
 const APP_SHELL = [
   './',
   './index.html',
-  './styles.css',
+  './styles.css?version=4',
   './manifest.webmanifest',
   './assets/icon.svg',
-  './src/app.js',
+  './src/app.js?version=4',
   './src/state.js',
   './src/data/missions.js',
   './src/integrations/supabase-config.js',
