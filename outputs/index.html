@@ -7,7 +7,7 @@
     <meta name="description" content="Orbit & Oak turns screen time into real-world missions for children." />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./assets/icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./styles.css?version=8" />
+    <link rel="stylesheet" href="./styles.css?version=9" />
     <title>Orbit &amp; Oak</title>
   </head>
   <body>
@@ -31,7 +31,7 @@
             console.warn('Service worker cleanup skipped', error);
           }
         }
-        await import('./src/app-v5.js?version=8');
+        await import('./src/app-v5.js?version=9');
       };
       boot().catch((error) => {
         console.error('Orbit & Oak could not start', error);
@@ -40,3 +40,4 @@
     </script>
   </body>
 </html>
+
