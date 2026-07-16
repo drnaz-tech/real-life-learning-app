@@ -1,3 +1,6 @@
+Exit code: 0
+Wall time: 2.1 seconds
+Output:
 <!doctype html>
 <html lang="en">
   <head>
@@ -7,7 +10,7 @@
     <meta name="description" content="Orbit & Oak turns screen time into real-world missions for children." />
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./assets/icon.svg" type="image/svg+xml" />
-    <link rel="stylesheet" href="./styles.css?version=5" />
+    <link rel="stylesheet" href="./styles.css?version=6" />
     <title>Orbit &amp; Oak</title>
   </head>
   <body>
@@ -17,7 +20,7 @@
       const boot = async () => {
         if ('serviceWorker' in navigator) {
           try {
-            const refreshKey = 'orbit-oak-service-worker-refresh-v5';
+            const refreshKey = 'orbit-oak-service-worker-refresh-v6';
             if (navigator.serviceWorker.controller && sessionStorage.getItem(refreshKey) !== 'done') {
               sessionStorage.setItem(refreshKey, 'done');
               const registrations = await navigator.serviceWorker.getRegistrations();
@@ -26,7 +29,7 @@
               return;
             }
             sessionStorage.removeItem(refreshKey);
-            const registration = await navigator.serviceWorker.register('./sw.js?version=5');
+            const registration = await navigator.serviceWorker.register('./sw.js?version=6');
             await registration.update();
             const installing = registration.installing;
             if (installing) {
@@ -39,7 +42,7 @@
             console.warn('Offline shell update skipped', error);
           }
         }
-        await import('./src/app-v5.js?version=5');
+        await import('./src/app-v5.js?version=6');
       };
       boot().catch((error) => {
         console.error('Orbit & Oak could not start', error);
@@ -48,3 +51,4 @@
     </script>
   </body>
 </html>
+
