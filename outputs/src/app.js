@@ -1,6 +1,6 @@
 import { BADGES, LEVELS, MISSIONS, getLevel, getMission } from './data/missions.js';
 import { clearProgress, completionCount, currentMissionId, getLevelProgress, hasCompleted, isMissionOpen, loadState, saveState, totalXp } from './state.js';
-import { authApi, authMessage, familyApi, supabaseEnabled } from './integrations/supabase-service.js?version=8';
+import { authApi, authMessage, familyApi, supabaseEnabled } from './integrations/supabase-service.js?version=9';
 
 const app = document.getElementById('app');
 const toast = document.getElementById('toast');
@@ -14,6 +14,7 @@ let modal = null;
 let authUser = null;
 let authError = '';
 let authBusy = false;
+let hydratedOwnerId = null;
 
 const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[char]));
 const formatDate = (date) => new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(new Date(date));
@@ -21,11 +22,22 @@ const currentMission = () => { const id = currentMissionId(MISSIONS, state); ret
 const currentLevel = () => currentMission()?.level || 'expert';
 const childName = () => state.child.name || 'Explorer';
 const earnedLevelBadge = (levelId) => Boolean(state.levelRewards[levelId]);
+const missionReward = (mission) => state.missionRewardOverrides?.[mission.id] || mission.reward;
+const missionRewardApproval = (missionId) => state.missionRewardApprovals?.[missionId] || null;
+const hasEarnedBadge = (badge) => badge.id === 'first-launch' ? completionCount(state) >= 1 : badge.id === 'curious-hands' ? completionCount(state) >= 3 : badge.id === 'great-observer' ? completionCount(state) >= 5 : earnedLevelBadge(badge.level);
+const earnedBadgeCount = () => BADGES.filter(hasEarnedBadge).length;
+const completionStreak = () => {
+  const days = new Set(Object.values(state.submissions || {}).map((item) => item.completedAt && new Date(item.completedAt).toDateString()).filter(Boolean));
+  let streak = 0; const cursor = new Date(); cursor.setHours(0, 0, 0, 0);
+  while (days.has(cursor.toDateString())) { streak += 1; cursor.setDate(cursor.getDate() - 1); }
+  return streak;
+};
+const requireAuthenticatedFamily = () => Boolean(authUser && hydratedOwnerId === authUser.id && state.child.profileComplete);
 const showToast = (message) => { toast.textContent = message; toast.classList.add('show'); window.clearTimeout(toastTimer); toastTimer = window.setTimeout(() => toast.classList.remove('show'), 3000); };
 const goTo = (nextRoute) => { modal = null; authError = ''; route = nextRoute; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
 const childRoute = () => state.child.profileComplete ? 'child-home' : 'child-home';
 
-const persistState = async () => {
+const persistState = async ({ strict = false } = {}) => {
   saveState(state);
   if (!supabaseEnabled || !authUser) return;
   try {
@@ -33,6 +45,7 @@ const persistState = async () => {
   } catch (error) {
     showToast('Saved on this device. Cloud sync needs attention.');
     console.error('Supabase sync failed', error);
+    if (strict) throw error;
   }
 };
 
@@ -52,7 +65,11 @@ const hydrateState = async (user) => {
         }
       }));
       saveState(state);
+    } else {
+      Object.assign(state, clearProgress(state), { parentEmail: user.email || '', child: { name: '', age: 8, theme: 'Space Explorers', profileComplete: false }, missionRewardOverrides: {}, missionRewardApprovals: {} });
+      saveState(state);
     }
+    hydratedOwnerId = user.id;
   } catch (error) {
     console.error('Supabase load failed', error);
     showToast('Cloud data could not load. Your device copy is still available.');
@@ -64,6 +81,7 @@ const startAuthObserver = () => {
   authApi.observe((user) => {
     authUser = user;
     if (!user) {
+      hydratedOwnerId = null;
       render();
       return;
     }
@@ -75,12 +93,24 @@ const startAuthObserver = () => {
   });
 };
 
-const hashPin = async (pin) => {
-  if (globalThis.crypto?.subtle) {
-    const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pin));
-    return Array.from(new Uint8Array(bytes)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
+const pinBytes = (value) => Array.from(new Uint8Array(value)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
+const createPinRecord = async (pin) => {
+  if (!globalThis.crypto?.subtle) throw new Error('Use a modern browser to create a secure family PIN.');
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits']);
+  const hash = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 210000, hash: 'SHA-256' }, key, 256);
+  return `v2.${pinBytes(salt)}.${pinBytes(hash)}`;
+};
+const verifyPinRecord = async (pin, record) => {
+  if (record?.startsWith('v2.')) {
+    const [, saltHex, hashHex] = record.split('.');
+    const salt = new Uint8Array(saltHex.match(/.{1,2}/g).map((part) => parseInt(part, 16)));
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits']);
+    const hash = pinBytes(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 210000, hash: 'SHA-256' }, key, 256));
+    return hash === hashHex;
   }
-  return btoa(pin.split('').reverse().join(''));
+  const bytes = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(pin));
+  return pinBytes(bytes) === record;
 };
 
 const navButton = (view, icon, label, active) => `<button class="nav-button ${active ? 'active' : ''}" type="button" data-action="child-nav" data-view="${view}" aria-current="${active ? 'page' : 'false'}"><span aria-hidden="true">${icon}</span>${label}</button>`;
@@ -104,23 +134,15 @@ const renderMissionHero = () => { const mission = currentMission(); if (!mission
 
 const renderChildHome = () => { const level = getLevel(currentLevel()); return `<section class="screen" aria-labelledby="child-home-title"><div class="app-heading"><div><p class="eyebrow">Mission control</p><h1 id="child-home-title">Hey, ${escapeHtml(childName())} <span aria-hidden="true">✦</span></h1><p>${escapeHtml(state.child.theme)} · ${level.name} level</p></div><div class="profile-chip"><div class="mini-avatar" aria-hidden="true">🧑🏽‍🚀</div><div><strong>Explorer level ${Math.min(4, Math.floor(completionCount(state) / 13) + 1)}</strong><span>${totalXp(MISSIONS, state, LEVELS)} star points</span></div></div></div><div class="child-layout"><div>${renderMissionHero()}</div><div class="child-side">${renderProgressBar()}<article class="card streak-card"><h3><span class="flame" aria-hidden="true">🔥</span> Four-day streak!</h3><p>Keep your explorer boots on today to unlock a bonus badge.</p></article><article class="card badge-card"><div class="section-heading"><h3>Badge shelf</h3><button class="linkish" type="button" data-action="child-nav" data-view="badges">See all</button></div><div class="badge-row">${BADGES.slice(0, 4).map((badge) => `<div class="badge ${earnedLevelBadge(badge.level) || badge.kind === 'earned' ? 'earned' : 'locked'}" aria-label="${badge.name}">${badge.icon}</div>`).join('')}</div><p class="tiny-note">${BADGES.filter((badge) => badge.kind === 'earned' || earnedLevelBadge(badge.level)).length} badges earned</p></article></div></div>${childNav('child-home')}</section>`; };
 
-const renderMissionPath = () => `<div class="climb-path" aria-label="49 mission climb path">${LEVELS.map((level) => { const progress = getLevelProgress(MISSIONS, state, level.id); return `<section class="path-level ${level.color}" aria-labelledby="path-${level.id}"><div class="path-level-heading"><div class="path-level-icon">${level.icon}</div><div><p class="eyebrow">${level.name} level</p><h2 id="path-${level.id}">${level.range}</h2></div><div class="path-level-reward"><strong>${progress.complete}/${progress.total}</strong><span>${progress.isComplete ? 'Reward unlocked' : `${level.xp} XP each`}</span></div></div><div class="path-stops">${MISSIONS.filter((mission) => mission.level === level.id).map((mission, index) => { const done = hasCompleted(state, mission.id); const open = isMissionOpen(MISSIONS, state, mission); return `<div class="path-stop ${index % 2 ? 'right' : 'left'} ${done ? 'done' : ''} ${open && !done ? 'current' : ''}"><button class="path-node" type="button" data-action="open-mission" data-mission-id="${mission.id}" ${open ? '' : 'disabled'} aria-label="Mission ${mission.order}: ${escapeHtml(mission.title)}${done ? ', complete' : open ? ', current mission' : ', locked'}"><span>${done ? '✓' : mission.order}</span><strong>${escapeHtml(mission.title)}</strong><small>${open && !done ? 'Climb here' : done ? 'Complete' : 'Locked'}</small></button></div>`; }).join('')}</div><div class="path-reward"><span class="path-reward-icon">🎁</span><div><strong>${progress.isComplete ? `${level.badge} earned` : 'Reward at the summit'}</strong><span>${escapeHtml(level.reward)}</span></div></div></section>`; }).join('')}</div>`;
-
-const renderMissions = () => `<section class="screen" aria-labelledby="missions-title"><div class="missions-head"><div><p class="eyebrow">The full adventure</p><h1 id="missions-title">Climb from curious<br />to capable.</h1><p>Each stop is something a child can do in the real world. Finish the trail, unlock the next level, and earn a reward a parent can approve.</p></div><div class="mission-count-big"><strong>${completionCount(state)}</strong> / 49 complete</div></div>${renderMissionPath()}${childNav('missions')}</section>`;
-
-const renderBadges = () => `<section class="screen" aria-labelledby="badges-title"><div class="missions-head"><div><p class="eyebrow">Your collection</p><h1 id="badges-title">Badge shelf.</h1><p>Badges are reminders of what your hands and brain can do.</p></div><div class="mission-count-big"><strong>${BADGES.filter((badge) => badge.kind === 'earned' || earnedLevelBadge(badge.level)).length}</strong> earned</div></div><div class="badge-page-grid">${BADGES.map((badge) => { const earned = badge.kind === 'earned' || earnedLevelBadge(badge.level); return `<article class="card badge-page-card ${earned ? '' : 'locked'}"><div class="badge-page-icon">${badge.icon}</div><h3>${badge.name}</h3><p>${badge.description}</p>${earned ? '<span class="badge-status">Earned</span>' : '<span class="badge-status">Locked</span>'}</article>`; }).join('')}</div>${childNav('badges')}</section>`;
-
-const renderRewards = () => LEVELS.map((level) => { const progress = getLevelProgress(MISSIONS, state, level.id); const unlocked = progress.isComplete; const approved = Boolean(state.approvedRewards[level.id]); return `<div class="reward-row ${unlocked ? 'unlocked' : ''}"><div class="reward-icon">${level.icon}</div><div><strong>${level.name} level reward</strong><span>${unlocked ? level.reward : `${progress.complete}/${progress.total} missions complete`}</span></div>${unlocked ? (approved ? '<span class="approved-label">Approved ✓</span>' : `<button class="btn btn-light" type="button" data-action="approve-reward" data-level="${level.id}">Approve</button>`) : '<span class="locked-label">Locked</span>'}</div>`; }).join('');
-const renderLevelOverview = () => `<div class="level-overview" aria-label="Level progress">${LEVELS.map((level) => { const progress = getLevelProgress(MISSIONS, state, level.id); return `<div class="level-overview-row"><div class="level-overview-label"><span>${level.icon}</span><strong>${level.name}</strong><small>${progress.complete}/${progress.total}</small></div><div class="level-overview-track"><div style="width: ${Math.round((progress.complete / progress.total) * 100)}%"></div></div></div>`; }).join('')}</div>`;
-
-const renderActivity = () => { const entries = Object.entries(state.submissions).sort(([, a], [, b]) => new Date(b.completedAt) - new Date(a.completedAt)); if (!entries.length) return '<div class="empty-state"><span aria-hidden="true">📝</span><strong>No missions brought back yet.</strong><p>When a child completes a physical mission, the photo and story will appear here.</p></div>'; return `<div class="activity-list">${entries.slice(0, 8).map(([id, item]) => { const mission = getMission(id); const photoUrl = item.photoData || item.photoUrl; return `<div class="activity-item"><div class="activity-thumb">${mission?.icon || '✦'}</div>${photoUrl ? `<img class="activity-photo" src="${photoUrl}" alt="Photo returned for ${escapeHtml(mission?.title || 'mission')}" />` : ''}<div><strong>${escapeHtml(mission?.title || item.title)}</strong><p>${escapeHtml(item.note || mission?.evidence || 'Mission completed and brought back.')}</p></div><time>${formatDate(item.completedAt)}</time></div>`; }).join('')}</div>`; };
-
-const renderParent = () => `<section class="screen" aria-labelledby="parent-title"><div class="parent-header"><div><p class="eyebrow">Grown-up space</p><h1 id="parent-title">${escapeHtml(childName())}’s little<br />adventure log.</h1><p>A quick view of what happened away from the app.</p></div><div class="role-switch"><button class="active" type="button">Parent</button><button type="button" data-action="switch-child">Child view</button></div></div><div class="parent-grid"><article class="card profile-card"><div class="profile-row"><div class="profile-avatar" aria-hidden="true">🧑🏽‍🚀</div><div><h2>${escapeHtml(childName())}, age ${state.child.age}</h2><p>${escapeHtml(state.child.theme)} · cloud-synced child profile</p></div></div><div class="overview-stats"><div class="overview-stat"><strong>${completionCount(state)}</strong><span>missions done</span></div><div class="overview-stat"><strong>4</strong><span>day streak</span></div><div class="overview-stat"><strong>${BADGES.filter((badge) => badge.kind === 'earned' || earnedLevelBadge(badge.level)).length}</strong><span>badges earned</span></div></div>${renderLevelOverview()}<div class="parent-email"><span>Parent account</span><strong>${escapeHtml(state.parentEmail || 'Child-only demo mode')}</strong></div></article><article class="card approval-card"><p class="eyebrow">Real-life rewards</p><h2>Approve a next step</h2><p>Rewards appear when a level is complete. Choose what fits your family today.</p><div class="reward-list">${renderRewards()}</div></article></div><article class="card activity-card"><div class="section-heading"><div><h2>What ${escapeHtml(childName())}’s been up to</h2><p class="muted">Physical work brought back into the story.</p></div><span class="linkish">${Object.keys(state.submissions).length} returned</span></div>${renderActivity()}</article><article class="card settings-card"><div><p class="eyebrow">Family settings</p><h2>Keep the trail yours.</h2><p class="muted">Your child profile, progress, and private mission evidence sync to the signed-in parent account.</p></div><div class="settings-actions"><button class="btn btn-light" type="button" data-action="edit-profile">Edit child profile</button><button class="btn btn-quiet danger-link" type="button" data-action="reset-progress">Reset mission progress</button></div></article></section>`;
-
-const renderModal = () => { if (!modal) return ''; const mission = getMission(modal.missionId); const level = getLevel(mission.level); const completed = hasCompleted(state, mission.id); return `<div class="modal-backdrop open" role="dialog" aria-modal="true" aria-labelledby="mission-dialog-title"><div class="modal mission-modal"><div class="modal-top"><div class="modal-icon">${mission.icon}</div><span class="modal-level">${level.name} · ${level.xp} XP</span></div><h2 id="mission-dialog-title">${escapeHtml(mission.title)}</h2><p>${escapeHtml(mission.hook)}</p><div class="materials-line"><strong>Bring:</strong> ${mission.materials.map(escapeHtml).join(' · ')}</div><div class="mission-progress-summary"><span>${modal.checkedSteps.length}/${mission.steps.length} steps checked</span><span>${modal.photoData ? 'Photo attached' : 'Photo still needed'}</span></div><div class="step-list">${mission.steps.map((step, index) => `<label class="step-item ${modal.checkedSteps.includes(index) ? 'checked' : ''}"><input type="checkbox" data-action="toggle-step" data-step-index="${index}" ${modal.checkedSteps.includes(index) ? 'checked' : ''} ${completed ? 'disabled' : ''} /><span>${escapeHtml(step)}</span></label>`).join('')}</div><div class="evidence-box"><div class="evidence-header"><div><strong>Bring it back</strong><span>${escapeHtml(mission.evidence)}</span></div><span aria-hidden="true">📸</span></div>${modal.photoData ? `<img class="photo-preview" src="${modal.photoData}" alt="Selected mission evidence" />` : ''}${completed ? '' : `<label class="upload-button btn btn-light" for="mission-photo">${modal.photoData ? 'Choose a different photo' : 'Add a photo'}</label><input class="file-hidden" id="mission-photo" data-action="photo-change" type="file" accept="image/*" />`} </div>${completed ? '<p class="completed-note">Mission complete. You can revisit the evidence whenever you like.</p>' : `<label class="form-label" for="mission-note">A sentence about what you noticed (optional)</label><textarea class="form-control mission-note" id="mission-note" data-action="mission-note" rows="2" placeholder="I noticed…">${escapeHtml(modal.note)}</textarea><p class="modal-status" id="modal-status">${escapeHtml(modal.message || '')}</p>`}<div class="modal-actions"><button class="btn btn-quiet" type="button" data-action="close-modal">${completed ? 'Close' : 'Not yet'}</button>${completed ? '' : '<button class="btn btn-primary" type="button" data-action="complete-mission">Complete mission ✦</button>'}</div></div></div>`; };
-
-const render = () => { const views = { login: renderLogin, roles: renderRoles, pin: renderPin, 'profile-setup': renderProfileSetup, 'child-home': renderChildHome, missions: renderMissions, badges: renderBadges, parent: renderParent }; app.innerHTML = `${renderHeader()}<main class="app-main">${views[route]()}</main>${renderModal()}`; };
-
+const renderMissionPath = () => `<div class="climb-path" aria-label="49 mission climb path">${LEVELS.map((le…2836 tokens truncated… ${escapeHtml(mission.title)}</strong><input class="form-control" id="mission-reward-${mission.id}" value="${escapeHtml(missionReward(mission))}" aria-label="Reward for ${escapeHtml(mission.title)}" /><span>${submission ? (approval ? 'Approved for real life ✓' : 'Mission complete · reward pending') : 'Locked until this mission is completed'}</span></div><div class="reward-actions"><button class="btn btn-light" type="button" data-action="save-mission-reward" data-mission-id="${mission.id}">Save</button>${submission && !approval ? `<button class="btn btn-primary" type="button" data-action="approve-mission-reward" data-mission-id="${mission.id}">Approve</button>` : ''}</div></div>`; }).join('')}</div></section>`;
+const enhanceRenderedView = () => {
+  if (route === 'child-home') { const streak = completionStreak(); const heading = document.querySelector('.streak-card h3'); if (heading) heading.innerHTML = `<span class="flame" aria-hidden="true">🔥</span> ${streak ? `${streak}-day streak!` : 'Start a streak today!'}`; const note = document.querySelector('.badge-card .tiny-note'); if (note) note.textContent = `${earnedBadgeCount()} badges earned`; document.querySelectorAll('.badge-row .badge').forEach((element, index) => element.classList.toggle('earned', hasEarnedBadge(BADGES[index]))); }
+  if (route === 'badges') document.querySelectorAll('.badge-page-card').forEach((element, index) => { const earned = hasEarnedBadge(BADGES[index]); element.classList.toggle('locked', !earned); const status = element.querySelector('.badge-status'); if (status) status.textContent = earned ? 'Earned' : 'Locked'; });
+  if (route !== 'parent') return;
+  const stats = document.querySelectorAll('.overview-stat strong'); if (stats[1]) stats[1].textContent = completionStreak(); if (stats[2]) stats[2].textContent = earnedBadgeCount(); const account = document.querySelector('.parent-email strong'); if (account) account.textContent = state.parentEmail || authUser?.email || 'Signed-in parent';
+  const approvalCard = document.querySelector('.approval-card'); if (approvalCard) { const pending = MISSIONS.filter((mission) => state.submissions[mission.id] && !missionRewardApproval(mission.id)); approvalCard.innerHTML = `<p class="eyebrow">Real-life rewards</p><h2>Mission reward queue</h2><p>Every finished mission appears here as pending until a grown-up approves it.</p><div class="reward-list">${pending.length ? pending.slice(0, 5).map((mission) => `<div class="reward-row unlocked"><div class="reward-icon">${mission.icon}</div><div><strong>${escapeHtml(mission.title)}</strong><span>${escapeHtml(missionReward(mission))}</span></div><button class="btn btn-primary" type="button" data-action="approve-mission-reward" data-mission-id="${mission.id}">Approve</button></div>`).join('') : '<div class="empty-state"><span aria-hidden="true">🌱</span><strong>No rewards waiting yet.</strong><p>Complete a mission to bring its reward here.</p></div>'}</div><button class="btn btn-light" type="button" data-action="open-reward-planner">Edit all 49 rewards</button>`; }
+  const entries = Object.entries(state.submissions || {}).sort(([, a], [, b]) => new Date(b.completedAt) - new Date(a.completedAt)); document.querySelectorAll('.activity-item').forEach((element, index) => { const missionId = entries[index]?.[0]; if (!missionId) return; const status = document.createElement('span'); status.className = missionRewardApproval(missionId) ? 'approved-label' : 'locked-label'; status.textContent = missionRewardApproval(missionId) ? 'Reward approved ✓' : 'Reward pending'; element.append(status); });
+};
 const readFile = (file) => new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file); });
 
 const openMission = (missionId) => { const mission = getMission(missionId); if (!mission) return; if (!isMissionOpen(MISSIONS, state, mission)) { showToast('Finish the earlier missions to unlock this one.'); return; } const submission = state.submissions[missionId]; modal = { missionId, checkedSteps: hasCompleted(state, missionId) ? mission.steps.map((_, index) => index) : [], photoData: submission?.photoData || '', photoFile: null, note: submission?.note || '', message: '' }; render(); };
@@ -152,7 +174,6 @@ const handleSubmitSafe = async (form, submitterMode = form.dataset.submitterMode
         return;
       }
       authUser = response.data.user;
-      await persistState();
       authBusy = false;
       goTo('roles');
       showToast('Signed in securely. Choose your space.');
@@ -177,16 +198,15 @@ const handleSubmitSafe = async (form, submitterMode = form.dataset.submitterMode
     const pin = String(data.get('pin') || '');
     const status = document.getElementById('pin-status');
     if (!/^\d{4}$/.test(pin)) { status.textContent = 'Please enter exactly 4 numbers.'; return; }
-    const pinHash = await hashPin(pin);
     if (pinMode === 'setup') {
       const confirmPin = String(data.get('confirmPin') || '');
       if (pin !== confirmPin) { status.textContent = 'Those PINs do not match yet.'; return; }
-      state.parentPinHash = pinHash;
-      await persistState();
+      try { state.parentPinHash = await createPinRecord(pin); } catch (error) { status.textContent = error.message; return; }
+      saveState(state);
       sessionRole = 'parent';
       goTo('profile-setup');
       showToast('Family PIN saved. Now create the child profile.');
-    } else if (pinHash === state.parentPinHash) {
+    } else if (await verifyPinRecord(pin, state.parentPinHash)) {
       sessionRole = 'parent';
       goTo(state.child.profileComplete ? 'parent' : 'profile-setup');
       showToast('Parent space unlocked.');
@@ -196,8 +216,27 @@ const handleSubmitSafe = async (form, submitterMode = form.dataset.submitterMode
   }
 };
 
+const completeMissionForReal = async () => {
+  if (!modal) return;
+  const mission = getMission(modal.missionId);
+  if (!requireAuthenticatedFamily()) { modal.message = 'A grown-up must sign in and set up this family before a mission can be saved.'; render(); return; }
+  if (modal.checkedSteps.length !== mission.steps.length) { modal.message = 'Check off each real-world step before completing the mission.'; render(); return; }
+  if (!modal.photoData || !modal.photoFile) { modal.message = 'Add a JPEG, PNG, or WebP photo of what you made before completing this mission.'; render(); return; }
+  try {
+    modal.message = 'Saving your mission safely…'; render();
+    const photoPath = (await familyApi.uploadMissionPhoto(authUser.id, mission.id, modal.photoFile)).path;
+    const now = new Date().toISOString();
+    const submission = { photoData: modal.photoData, photoPath, note: modal.note, completedAt: now, title: mission.title, rewardLabel: missionReward(mission), rewardStatus: 'pending', rewardApprovedAt: null };
+    state.completedMissionIds = [...new Set([...state.completedMissionIds, mission.id])].sort((a, b) => getMission(a).order - getMission(b).order);
+    state.submissions[mission.id] = submission; state.lastActivityAt = now;
+    const progress = getLevelProgress(MISSIONS, state, mission.level); if (progress.isComplete) state.levelRewards[mission.level] = { unlockedAt: now, reward: getLevel(mission.level).reward };
+    await Promise.all([familyApi.saveMissionSubmission(authUser.id, { missionId: mission.id, ...submission }), persistState({ strict: true })]);
+    modal = null; render(); showToast(`Mission complete! ${missionReward(mission)} is waiting for approval.`);
+  } catch (error) { console.error('Mission save failed', error); modal.message = 'Your mission could not be saved yet. Check your connection and try again.'; render(); }
+};
 app.addEventListener('submit', (event) => { const form = event.target.closest('form[data-form]'); if (!form) return; event.preventDefault(); handleSubmitSafe(form, event.submitter?.dataset.authMode || form.dataset.submitterMode || 'signin'); });
 app.addEventListener('input', (event) => { if (event.target.matches('[data-action="mission-note"]') && modal) modal.note = event.target.value; });
+app.addEventListener('change', (event) => { if (!event.target.matches('[data-action="photo-change"]') || !modal) return; const file = event.target.files?.[0]; if (!file) return; if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024) { event.stopImmediatePropagation(); modal.photoFile = null; modal.photoData = ''; modal.message = 'Use a JPEG, PNG, or WebP photo smaller than 10 MB.'; render(); } }, true);
 app.addEventListener('change', async (event) => { if (event.target.matches('[data-action="toggle-step"]') && modal) { const index = Number(event.target.dataset.stepIndex); modal.checkedSteps = event.target.checked ? [...new Set([...modal.checkedSteps, index])] : modal.checkedSteps.filter((item) => item !== index); render(); } if (event.target.matches('[data-action="photo-change"]') && modal && event.target.files?.[0]) { modal.photoFile = event.target.files[0]; modal.photoData = await readFile(event.target.files[0]); modal.message = ''; render(); } });
 app.addEventListener('click', async (event) => { const target = event.target.closest('[data-action]'); if (!target) return; const action = target.dataset.action; if (action === 'reset-password') { const email = String(document.getElementById('parent-email')?.value || state.parentEmail || '').trim(); if (!email) { authError = 'Enter your parent email first.'; render(); return; } try { await authApi.sendPasswordReset(email); authError = 'Password reset email sent. Check your inbox.'; render(); } catch (error) { authError = authMessage(error); render(); } } else if (action === 'approve-reward' || action === 'reset-progress') { if (supabaseEnabled && authUser) await persistState(); } else if (action === 'sign-out' && supabaseEnabled) { try { await authApi.signOut(); } catch (error) { console.error('Supabase sign out failed', error); } authUser = null; } });
 
@@ -210,18 +249,21 @@ app.addEventListener('click', async (event) => {
   const target = event.target.closest('[data-action]');
   if (!target) return;
   const action = target.dataset.action;
-  // Preserve native checkbox behavior; the change handler owns checklist state.
+  // Let native form controls keep their browser behavior. The change handler
+  // below owns the checklist state after the checkbox has toggled.
   if (action === 'toggle-step') return;
   event.preventDefault();
 
-  if (action === 'show-roles') return goTo('roles');
+  if (action === 'show-roles') { if (!authUser) { route = 'login'; authError = 'A grown-up must sign in before opening child access.'; return render(); } return goTo('roles'); }
   if (action === 'back-login') return goTo('login');
   if (action === 'back-roles') return goTo('roles');
   if (action === 'parent-role') {
+    if (!authUser || hydratedOwnerId !== authUser.id) { route = 'login'; authError = 'Your family space is still loading. Please wait a moment.'; return render(); }
     pinMode = state.parentPinHash ? 'verify' : 'setup';
     return goTo('pin');
   }
   if (action === 'child-role') {
+    if (!requireAuthenticatedFamily()) { route = 'login'; authError = 'A grown-up needs to sign in and finish the child profile first.'; return render(); }
     sessionRole = 'child';
     return goTo(childRoute());
   }
@@ -239,18 +281,33 @@ app.addEventListener('click', async (event) => {
     return showToast('No rush. Your mission is waiting when you are ready.');
   }
   if (action === 'close-modal') { modal = null; return render(); }
-  if (action === 'complete-mission') return completeMission();
+  if (action === 'complete-mission') return completeMissionForReal();
   if (action === 'parent-from-child') {
     pinMode = state.parentPinHash ? 'verify' : 'setup';
     return goTo('pin');
   }
   if (action === 'switch-child') {
+    if (!requireAuthenticatedFamily()) return goTo('login');
     sessionRole = 'child';
     return goTo('child-home');
   }
   if (action === 'edit-profile') {
     sessionRole = 'parent';
     return goTo('profile-setup');
+  }
+  if (action === 'open-reward-planner') return goTo('reward-planner');
+  if (action === 'back-parent') return goTo('parent');
+  if (action === 'save-mission-reward') {
+    const mission = getMission(target.dataset.missionId); const input = document.getElementById(`mission-reward-${mission?.id}`); const reward = String(input?.value || '').trim();
+    if (!mission || !reward) return showToast('Add a reward before saving.');
+    state.missionRewardOverrides[mission.id] = reward;
+    const submission = state.submissions[mission.id]; if (submission) { submission.rewardLabel = reward; await familyApi.saveMissionSubmission(authUser.id, { missionId: mission.id, ...submission }); }
+    await persistState({ strict: true }); render(); return showToast('Mission reward saved.');
+  }
+  if (action === 'approve-mission-reward') {
+    const mission = getMission(target.dataset.missionId); if (!mission || !state.submissions[mission.id]) return;
+    const approvedAt = new Date().toISOString(); state.missionRewardApprovals[mission.id] = { approvedAt }; state.submissions[mission.id].rewardStatus = 'approved'; state.submissions[mission.id].rewardApprovedAt = approvedAt;
+    await Promise.all([familyApi.saveMissionSubmission(authUser.id, { missionId: mission.id, ...state.submissions[mission.id] }), persistState({ strict: true })]); render(); return showToast('Reward approved for real life.');
   }
   if (action === 'approve-reward') {
     const level = target.dataset.level;
@@ -284,3 +341,4 @@ document.addEventListener('keydown', (event) => {
 
 startAuthObserver();
 render();
+
