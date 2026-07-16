@@ -1,0 +1,56 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function familyData(familyId) {
+      return get(/databases/$(database)/documents/families/$(familyId)).data;
+    }
+
+    function isParent(familyId) {
+      return signedIn() && familyData(familyId).ownerUid == request.auth.uid;
+    }
+
+    function isMember(familyId) {
+      return signedIn() && (
+        familyData(familyId).ownerUid == request.auth.uid ||
+        familyData(familyId).childUid == request.auth.uid
+      );
+    }
+
+    match /families/{familyId} {
+      allow create: if signedIn() && request.resource.data.ownerUid == request.auth.uid;
+      allow read: if isMember(familyId);
+      allow update, delete: if isParent(familyId);
+
+      match /children/{childId} {
+        allow read: if isMember(familyId);
+        allow create, update, delete: if isParent(familyId);
+      }
+
+      match /progress/{missionId} {
+        allow read: if isMember(familyId);
+        allow create, update: if isMember(familyId)
+          && request.resource.data.missionId == missionId
+          && request.resource.data.completedAt is timestamp;
+        allow delete: if isParent(familyId);
+      }
+
+      match /submissions/{missionId} {
+        allow read: if isMember(familyId);
+        allow create, update: if isMember(familyId)
+          && request.resource.data.missionId == missionId
+          && request.resource.data.createdBy == request.auth.uid;
+        allow delete: if isParent(familyId);
+      }
+
+      match /rewards/{levelId} {
+        allow read: if isMember(familyId);
+        allow create, update, delete: if isParent(familyId);
+      }
+    }
+  }
+}
