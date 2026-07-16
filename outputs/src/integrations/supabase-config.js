@@ -1,6 +1,3 @@
-Exit code: 0
-Wall time: 2 seconds
-Output:
 // Supabase browser configuration.
 // The anon key is designed to be public. Never put a service-role key here.
 // Paste the values from Supabase Dashboard > Project Settings > API.
