@@ -163,7 +163,6 @@ export const authApi = {
 const remoteState = (ownerId, state) => ({
   owner_id: ownerId,
   parent_email: state.parentEmail || null,
-  parent_pin_hash: state.parentPinHash || null,
   child: state.child || {},
   completed_mission_ids: state.completedMissionIds || [],
   submissions: Object.fromEntries(Object.entries(state.submissions || {}).map(([missionId, submission]) => [missionId, {
@@ -171,8 +170,13 @@ const remoteState = (ownerId, state) => ({
     note: submission.note || '',
     completedAt: submission.completedAt || null,
     title: submission.title || '',
-    photoPath: submission.photoPath || null
+    photoPath: submission.photoPath || null,
+    rewardLabel: submission.rewardLabel || '',
+    rewardStatus: submission.rewardStatus || 'pending',
+    rewardApprovedAt: submission.rewardApprovedAt || null
   }])),
+  mission_reward_overrides: state.missionRewardOverrides || {},
+  mission_reward_approvals: state.missionRewardApprovals || {},
   level_rewards: state.levelRewards || {},
   approved_rewards: state.approvedRewards || {},
   last_activity_at: state.lastActivityAt || null,
@@ -181,10 +185,11 @@ const remoteState = (ownerId, state) => ({
 
 const localState = (row) => row ? ({
   parentEmail: row.parent_email || '',
-  parentPinHash: row.parent_pin_hash || '',
   child: row.child || {},
   completedMissionIds: row.completed_mission_ids || [],
   submissions: row.submissions || {},
+  missionRewardOverrides: row.mission_reward_overrides || {},
+  missionRewardApprovals: row.mission_reward_approvals || {},
   levelRewards: row.level_rewards || {},
   approvedRewards: row.approved_rewards || {},
   lastActivityAt: row.last_activity_at || null
@@ -199,14 +204,42 @@ const storageHeaders = (token, contentType = 'application/octet-stream') => ({
 export const familyApi = {
   load: async (ownerId) => {
     const token = await accessToken();
-    const rows = await fetch(apiUrl(`/rest/v1/families?select=*&owner_id=eq.${encodeURIComponent(ownerId)}&limit=1`), {
-      headers: jsonHeaders(token)
-    }).then(async (response) => {
-      const payload = await response.json();
-      if (!response.ok) throw normalizeError(payload, `Could not load family data (${response.status}).`);
-      return payload;
-    });
-    return localState(rows?.[0] || null);
+    const [familyRows, submissionRows] = await Promise.all([
+      fetch(apiUrl(`/rest/v1/families?select=*&owner_id=eq.${encodeURIComponent(ownerId)}&limit=1`), {
+        headers: jsonHeaders(token)
+      }).then(async (response) => {
+        const payload = await response.json();
+        if (!response.ok) throw normalizeError(payload, `Could not load family data (${response.status}).`);
+        return payload;
+      }),
+      fetch(apiUrl(`/rest/v1/mission_submissions?select=*&owner_id=eq.${encodeURIComponent(ownerId)}&order=completed_at.desc`), {
+        headers: jsonHeaders(token)
+      }).then(async (response) => {
+        const payload = await response.json();
+        if (!response.ok) throw normalizeError(payload, `Could not load mission activity (${response.status}).`);
+        return payload;
+      })
+    ]);
+    const family = localState(familyRows?.[0] || null);
+    if (!family) return null;
+    const submissions = (submissionRows || []).reduce((all, row) => ({
+      ...all,
+      [row.mission_id]: {
+        missionId: row.mission_id,
+        title: row.title || '',
+        note: row.note || '',
+        completedAt: row.completed_at || null,
+        photoPath: row.photo_path || null,
+        rewardLabel: row.reward_label || '',
+        rewardStatus: row.reward_status || 'pending',
+        rewardApprovedAt: row.reward_approved_at || null
+      }
+    }), {});
+    return {
+      ...family,
+      completedMissionIds: [...new Set([...(family.completedMissionIds || []), ...Object.keys(submissions)])],
+      submissions: { ...(family.submissions || {}), ...submissions }
+    };
   },
 
   save: async (ownerId, state) => {
@@ -226,6 +259,9 @@ export const familyApi = {
 
   uploadMissionPhoto: async (ownerId, missionId, file) => {
     const token = await accessToken();
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) throw new Error('Choose a JPG, PNG, or WebP image.');
+    if (file.size > 10 * 1024 * 1024) throw new Error('Choose a photo smaller than 10 MB.');
     const extension = (file.name?.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
     const path = `${ownerId}/${missionId}.${extension}`;
     const response = await fetch(apiUrl(`/storage/v1/object/mission-evidence/${path.split('/').map(encodeURIComponent).join('/')}`), {
@@ -235,6 +271,32 @@ export const familyApi = {
     });
     if (!response.ok) throw normalizeError(await response.json(), `Could not upload photo (${response.status}).`);
     return { path };
+  },
+
+  saveMissionSubmission: async (ownerId, submission) => {
+    const token = await accessToken();
+    const response = await fetch(apiUrl('/rest/v1/mission_submissions?on_conflict=owner_id,mission_id'), {
+      method: 'POST',
+      headers: {
+        ...jsonHeaders(token),
+        Prefer: 'resolution=merge-duplicates,return=representation'
+      },
+      body: JSON.stringify({
+        owner_id: ownerId,
+        mission_id: submission.missionId,
+        title: submission.title || '',
+        note: submission.note || '',
+        photo_path: submission.photoPath || null,
+        completed_at: submission.completedAt || new Date().toISOString(),
+        reward_label: submission.rewardLabel || '',
+        reward_status: submission.rewardStatus === 'approved' ? 'approved' : 'pending',
+        reward_approved_at: submission.rewardApprovedAt || null,
+        updated_at: new Date().toISOString()
+      })
+    });
+    const payload = await response.json();
+    if (!response.ok) throw normalizeError(payload, `Could not save mission activity (${response.status}).`);
+    return payload?.[0] || null;
   },
 
   getMissionPhotoUrl: async (path) => {
