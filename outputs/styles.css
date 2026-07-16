@@ -23,11 +23,12 @@
 }
 
 * { box-sizing: border-box; }
-html { min-width: 320px; background: var(--paper); }
-body { margin: 0; color: var(--ink); background: var(--paper); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+html { min-width: 320px; background: var(--paper); font-family: ui-rounded, "Avenir Next", "Segoe UI", system-ui, sans-serif; }
+body { margin: 0; color: var(--ink); background: radial-gradient(circle at 8% 0%, #ffffff 0, var(--paper) 38rem); font-family: ui-rounded, "Avenir Next", "Segoe UI", system-ui, sans-serif; font-size: 16px; line-height: 1.4; text-rendering: optimizeLegibility; -webkit-font-smoothing: antialiased; }
 button, input, textarea { font: inherit; }
 button { cursor: pointer; }
 button:focus-visible, input:focus-visible, textarea:focus-visible { outline: 3px solid #aaa3ff; outline-offset: 3px; }
+button:disabled { cursor: not-allowed; }
 a { color: inherit; text-decoration: none; }
 .app-shell { min-height: 100vh; }
 .topbar { min-height: 72px; padding: 0 clamp(18px, 5vw, 58px); display: flex; align-items: center; justify-content: space-between; background: rgba(255,255,255,.90); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; backdrop-filter: blur(16px); }
@@ -41,6 +42,7 @@ a { color: inherit; text-decoration: none; }
 .screen { animation: rise .30s ease both; }
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 h1, h2, h3, p { margin-top: 0; }
+h1, h2, h3, .brand, .btn, .eyebrow { font-family: ui-rounded, "Avenir Next", "Segoe UI", system-ui, sans-serif; }
 h1 { font-size: clamp(32px, 5vw, 55px); line-height: 1.02; letter-spacing: -.065em; margin-bottom: 12px; }
 h2 { font-size: 25px; line-height: 1.08; letter-spacing: -.045em; margin-bottom: 7px; }
 h3 { font-size: 16px; letter-spacing: -.025em; margin-bottom: 7px; }
@@ -374,3 +376,4 @@ button.linkish { border: 0; background: none; padding: 0; }
 @media (max-width: 560px) { .topbar { min-height: 64px; } .app-main { padding-top: 22px; } .role-grid { grid-template-columns: 1fr; } .role-card p { min-height: 0; } .app-heading { align-items: flex-start; } .profile-chip { margin-top: 2px; } .mission-hero { min-height: 505px; padding: 22px; } .mission-copy { margin-top: 47px; } .orbit-doodle { right: 18px; bottom: 12px; transform: scale(.82); transform-origin: bottom right; } .child-side { grid-template-columns: 1fr; } .badge-card { grid-column: auto; } .mission-grid { grid-template-columns: repeat(7, 1fr); gap: 5px; } .tier-card { padding: 16px; } .tier-reward span { display: none; } .missions-head, .parent-header { display: block; } .mission-count-big, .role-switch { display: inline-flex; margin-top: 15px; } .badge-page-grid { grid-template-columns: repeat(2, 1fr); } .overview-stats { gap: 5px; } .overview-stat { padding: 10px 8px; } .activity-item time { display: none; } .settings-card { display: block; } .settings-card .btn { margin-top: 14px; } .settings-actions { justify-content: flex-start; margin-top: 14px; gap: 12px; } .profile-form-grid { grid-template-columns: 1fr; } .flow-steps { gap: 5px; font-size: 8px; } .flow-steps li:not(:last-child)::after { width: 10px; } .level-overview-row { grid-template-columns: 95px 1fr; } .landing-climb { margin-top: 22px; } .landing-route-stop small { display: none; } .path-level { padding: 15px; } .path-level-heading { gap: 9px; } .path-level-heading h2 { font-size: 16px; } .path-level-reward span { display: none; } .path-stops::before { left: 20px; transform: none; } .path-stop { grid-template-columns: 1fr; padding-left: 36px; } .path-stop.left .path-node, .path-stop.right .path-node { grid-column: 1; margin: 0; } .path-stop.left::before, .path-stop.right::before { left: 20px; right: auto; width: 16px; } .path-node strong { font-size: 11px; } .path-node small { font-size: 9px; } .modal { padding: 22px; } }
 @media (max-width: 390px) { .landing-route { grid-template-columns: repeat(2, 1fr); gap: 14px 7px; } .landing-route-line { top: 26px; left: 25%; right: 25%; height: 42px; width: 50%; border-top: 2px solid #d8d4f9; border-bottom: 2px solid #d8d4f9; background: none; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
