@@ -7,6 +7,8 @@ export const createDefaultState = () => ({
   child: { name: '', age: 8, theme: 'Space Explorers', profileComplete: false },
   completedMissionIds: [],
   submissions: {},
+  missionRewardOverrides: {},
+  missionRewardApprovals: {},
   levelRewards: {},
   approvedRewards: {},
   lastActivityAt: null
@@ -30,6 +32,8 @@ export const clearProgress = (state) => ({
   ...state,
   completedMissionIds: [],
   submissions: {},
+  missionRewardOverrides: {},
+  missionRewardApprovals: {},
   levelRewards: {},
   approvedRewards: {},
   lastActivityAt: null
@@ -60,3 +64,4 @@ export const totalXp = (missions, state, levels) => state.completedMissionIds.re
 }, 0);
 
 export const levelRewardKey = (levelId) => `${levelId}-reward`;
+
