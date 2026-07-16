@@ -1,9 +1,9 @@
 Exit code: 0
-Wall time: 2.1 seconds
+Wall time: 2 seconds
 Output:
 import { BADGES, LEVELS, MISSIONS, getLevel, getMission } from './data/missions.js';
 import { clearProgress, completionCount, currentMissionId, getLevelProgress, hasCompleted, isMissionOpen, loadState, saveState, totalXp } from './state.js';
-import { authApi, authMessage, familyApi, supabaseEnabled } from './integrations/supabase-service.js';
+import { authApi, authMessage, familyApi, supabaseEnabled } from './integrations/supabase-service.js?version=7';
 
 const app = document.getElementById('app');
 const toast = document.getElementById('toast');
@@ -111,7 +111,7 @@ const renderMissionPath = () => `<div class="climb-path" aria-label="49 mission 
 
 const renderMissions = () => `<section class="screen" aria-labelledby="missions-title"><div class="missions-head"><div><p class="eyebrow">The full adventure</p><h1 id="missions-title">Climb from curious<br />to capable.</h1><p>Each stop is something a child can do in the real world. Finish the trail, unlock the next level, and earn a reward a parent can approve.</p></div><div class="mission-count-big"><strong>${completionCount(state)}</strong> / 49 complete</div></div>${renderMissionPath()}${childNav('missions')}</section>`;
 
-const renderBadges = () => `<section class="screen" aria-labelledby="badges-title"><div class="missions-head"><div><p class="eyebrow">Your collection</p><h1 id="badges-title">Badge shelf.</h1><p>Badges are reminders of what your hands and brain can do.</p></div><div class="mission-c…54 tokens truncated….kind === 'earned' || earnedLevelBadge(badge.level); return `<article class="card badge-page-card ${earned ? '' : 'locked'}"><div class="badge-page-icon">${badge.icon}</div><h3>${badge.name}</h3><p>${badge.description}</p>${earned ? '<span class="badge-status">Earned</span>' : '<span class="badge-status">Locked</span>'}</article>`; }).join('')}</div>${childNav('badges')}</section>`;
+const renderBadges = () => `<section class="screen" aria-labelledby="badges-title"><div class="missions-head"><div><p class="eyebrow">Your collection</p><h1 id="badges-title">Badge shelf.</h1><p>Badges are reminders of what your hands and brain can do.</p></div><div class=…18 tokens truncated…arned' || earnedLevelBadge(badge.level)).length}</strong> earned</div></div><div class="badge-page-grid">${BADGES.map((badge) => { const earned = badge.kind === 'earned' || earnedLevelBadge(badge.level); return `<article class="card badge-page-card ${earned ? '' : 'locked'}"><div class="badge-page-icon">${badge.icon}</div><h3>${badge.name}</h3><p>${badge.description}</p>${earned ? '<span class="badge-status">Earned</span>' : '<span class="badge-status">Locked</span>'}</article>`; }).join('')}</div>${childNav('badges')}</section>`;
 
 const renderRewards = () => LEVELS.map((level) => { const progress = getLevelProgress(MISSIONS, state, level.id); const unlocked = progress.isComplete; const approved = Boolean(state.approvedRewards[level.id]); return `<div class="reward-row ${unlocked ? 'unlocked' : ''}"><div class="reward-icon">${level.icon}</div><div><strong>${level.name} level reward</strong><span>${unlocked ? level.reward : `${progress.complete}/${progress.total} missions complete`}</span></div>${unlocked ? (approved ? '<span class="approved-label">Approved ✓</span>' : `<button class="btn btn-light" type="button" data-action="approve-reward" data-level="${level.id}">Approve</button>`) : '<span class="locked-label">Locked</span>'}</div>`; }).join('');
 const renderLevelOverview = () => `<div class="level-overview" aria-label="Level progress">${LEVELS.map((level) => { const progress = getLevelProgress(MISSIONS, state, level.id); return `<div class="level-overview-row"><div class="level-overview-label"><span>${level.icon}</span><strong>${level.name}</strong><small>${progress.complete}/${progress.total}</small></div><div class="level-overview-track"><div style="width: ${Math.round((progress.complete / progress.total) * 100)}%"></div></div></div>`; }).join('')}</div>`;
@@ -285,8 +285,4 @@ document.addEventListener('keydown', (event) => {
 
 startAuthObserver();
 render();
-
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js?version=6').catch(() => {}));
-}
 

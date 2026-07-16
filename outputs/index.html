@@ -1,5 +1,5 @@
 Exit code: 0
-Wall time: 2.1 seconds
+Wall time: 2 seconds
 Output:
 <!doctype html>
 <html lang="en">
@@ -20,29 +20,21 @@ Output:
       const boot = async () => {
         if ('serviceWorker' in navigator) {
           try {
-            const refreshKey = 'orbit-oak-service-worker-refresh-v6';
-            if (navigator.serviceWorker.controller && sessionStorage.getItem(refreshKey) !== 'done') {
+            const refreshKey = 'orbit-oak-service-worker-cleanup-v7';
+            const hadController = Boolean(navigator.serviceWorker.controller);
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            await Promise.all(registrations.map((registration) => registration.unregister()));
+            if (hadController && sessionStorage.getItem(refreshKey) !== 'done') {
               sessionStorage.setItem(refreshKey, 'done');
-              const registrations = await navigator.serviceWorker.getRegistrations();
-              await Promise.all(registrations.map((registration) => registration.unregister()));
               window.location.reload();
               return;
             }
             sessionStorage.removeItem(refreshKey);
-            const registration = await navigator.serviceWorker.register('./sw.js?version=6');
-            await registration.update();
-            const installing = registration.installing;
-            if (installing) {
-              await new Promise((resolve) => installing.addEventListener('statechange', () => {
-                if (installing.state === 'activated') resolve();
-              }));
-            }
-            await navigator.serviceWorker.ready;
           } catch (error) {
-            console.warn('Offline shell update skipped', error);
+            console.warn('Service worker cleanup skipped', error);
           }
         }
-        await import('./src/app-v5.js?version=6');
+        await import('./src/app-v5.js?version=7');
       };
       boot().catch((error) => {
         console.error('Orbit & Oak could not start', error);
