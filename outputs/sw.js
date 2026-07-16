@@ -7,7 +7,7 @@ const APP_SHELL = [
   './styles.css?version=5',
   './manifest.webmanifest',
   './assets/icon.svg',
-  './src/app.js?version=5',
+  './src/app-v5.js?version=5',
   './src/state.js',
   './src/data/missions.js',
   './src/integrations/supabase-config.js',
