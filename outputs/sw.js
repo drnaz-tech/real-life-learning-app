@@ -1,6 +1,6 @@
 // Bump this whenever the app shell changes so returning families do not stay
 // on an older cached JavaScript bundle after a production deployment.
-const CACHE_NAME = 'orbit-oak-v2';
+const CACHE_NAME = 'orbit-oak-v3';
 const APP_SHELL = [
   './',
   './index.html',
@@ -30,3 +30,4 @@ self.addEventListener('fetch', (event) => {
     return response;
   }).catch(() => caches.match('./index.html'))));
 });
+
