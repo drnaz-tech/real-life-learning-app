@@ -1,0 +1,27 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function familyData(familyId) {
+      return get(/databases/(default)/documents/families/$(familyId)).data;
+    }
+
+    function isMember(familyId) {
+      return signedIn() && (
+        familyData(familyId).ownerUid == request.auth.uid ||
+        familyData(familyId).childUid == request.auth.uid
+      );
+    }
+
+    match /families/{familyId}/submissions/{missionId}/{fileName} {
+      allow read: if isMember(familyId);
+      allow write: if isMember(familyId)
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+  }
+}
