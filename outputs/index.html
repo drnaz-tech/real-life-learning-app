@@ -13,7 +13,30 @@
   <body>
     <div id="app" aria-live="polite"></div>
     <div id="toast" class="toast" role="status" aria-live="assertive"></div>
-    <script type="module" src="./src/app-v5.js?version=5"></script>
+    <script type="module">
+      const boot = async () => {
+        if ('serviceWorker' in navigator) {
+          try {
+            const registration = await navigator.serviceWorker.register('./sw.js?version=5');
+            await registration.update();
+            const installing = registration.installing;
+            if (installing) {
+              await new Promise((resolve) => installing.addEventListener('statechange', () => {
+                if (installing.state === 'activated') resolve();
+              }));
+            }
+            await navigator.serviceWorker.ready;
+          } catch (error) {
+            console.warn('Offline shell update skipped', error);
+          }
+        }
+        await import('./src/app-v5.js?version=5');
+      };
+      boot().catch((error) => {
+        console.error('Orbit & Oak could not start', error);
+        document.getElementById('app').innerHTML = '<main class="boot-error"><h1>Let’s try that again.</h1><p>The learning trail could not load. Refresh once to reconnect.</p></main>';
+      });
+    </script>
   </body>
 </html>
 
