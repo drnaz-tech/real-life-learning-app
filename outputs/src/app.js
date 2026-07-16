@@ -1,6 +1,3 @@
-Exit code: 0
-Wall time: 2.1 seconds
-Output:
 import { BADGES, LEVELS, MISSIONS, getLevel, getMission } from './data/missions.js';
 import { clearProgress, completionCount, currentMissionId, getLevelProgress, hasCompleted, isMissionOpen, loadState, levelRewardKey, saveState, totalXp } from './state.js';
 import { authApi, authMessage, familyApi, supabaseEnabled } from './integrations/supabase-service.js';
