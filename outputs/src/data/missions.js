@@ -7,8 +7,31 @@ const mission = (order, level, title, hook, materials, steps, evidence, icon) =>
   materials,
   steps,
   evidence,
-  icon
+  icon,
+  reward: MISSION_REWARDS[order - 1]
 });
+
+// Each mission has a small, screen-free reward suggestion. Parents can change
+// any of these in their dashboard before approving it for their own family.
+export const MISSION_REWARDS = [
+  'Choose the next family snack', 'Pick the bedtime story tonight', 'Choose a song for a kitchen dance break',
+  'Be the family museum guide for ten minutes', 'Choose a cozy drink with a grown-up', 'Pick a kind family helper job',
+  'Choose the next nature walk route', 'Build something together for fifteen minutes', 'Name tonight’s dessert fruit',
+  'Choose the color of a family drawing challenge', 'Pick a story to read aloud', 'Invite the family to your maker fair',
+  'Choose a breakfast helper task', 'Pick the music for a wind-down moment', 'Choose a recipe to make together',
+  'Invent a family constellation name', 'Choose a water-saving family challenge', 'Pick a balance-game challenge',
+  'Choose a nature word for everyone to use today', 'Choose an outdoor observation spot', 'Name your recycled robot’s next job',
+  'Ask the first question at family dinner', 'Choose a pattern to decorate with', 'Pick a living thing to learn about together',
+  'Choose one family experiment for the weekend', 'Pick the next building material to explore', 'Lead a two-minute music parade',
+  'Choose a nature documentary for family viewing later', 'Design a cozy corner for reading', 'Choose a chart topic for the family',
+  'Be the family navigator for one walk', 'Choose a small repair or tidy-up mission together', 'Choose a plant to observe tomorrow',
+  'Tell your object story at dinner', 'Set the next family bridge challenge', 'Choose a helpful neighborhood idea to try',
+  'Teach a grown-up one small skill', 'Choose a family photo story to make', 'Pick a habitat to explore in a book',
+  'Choose a household problem for the family to solve', 'Ask everyone for one piece of evidence', 'Choose a family routine to improve',
+  'Be the systems expert at dinner', 'Choose a memory to retell together', 'Pick a real-world data question to investigate',
+  'Choose the first game for family game night', 'Choose where to keep your future letter', 'Pick a useful family build project',
+  'Plan the next screen-free family adventure'
+];
 
 export const LEVELS = [
   { id: 'easy', name: 'Easy', range: 'Missions 1–12', color: 'mint', icon: '🌱', xp: 80, badge: 'Curious Sprout', reward: 'Pick a 20-minute family activity' },
@@ -85,3 +108,4 @@ export const BADGES = [
 export const getMission = (id) => MISSIONS.find((item) => item.id === id);
 export const getLevel = (id) => LEVELS.find((item) => item.id === id);
 export const getMissionsForLevel = (level) => MISSIONS.filter((item) => item.level === level);
+
