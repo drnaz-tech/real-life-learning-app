@@ -1,6 +1,3 @@
-Exit code: 0
-Wall time: 2 seconds
-Output:
 // Bump this whenever the app shell changes so returning families do not stay
 // on an older cached JavaScript bundle after a production deployment.
 const CACHE_NAME = 'orbit-oak-v6';
@@ -33,4 +30,3 @@ self.addEventListener('fetch', (event) => {
     return response;
   }).catch(() => caches.match('./index.html'))));
 });
-
