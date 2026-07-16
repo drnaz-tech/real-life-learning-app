@@ -1,4 +1,6 @@
-const CACHE_NAME = 'orbit-oak-v1';
+// Bump this whenever the app shell changes so returning families do not stay
+// on an older cached JavaScript bundle after a production deployment.
+const CACHE_NAME = 'orbit-oak-v2';
 const APP_SHELL = [
   './',
   './index.html',
@@ -7,7 +9,9 @@ const APP_SHELL = [
   './assets/icon.svg',
   './src/app.js',
   './src/state.js',
-  './src/data/missions.js'
+  './src/data/missions.js',
+  './src/integrations/supabase-config.js',
+  './src/integrations/supabase-service.js'
 ];
 
 self.addEventListener('install', (event) => {
