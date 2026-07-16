@@ -1,17 +1,1 @@
-{
-  "cleanUrls": true,
-  "trailingSlash": false,
-  "redirects": [
-    { "source": "/", "destination": "/outputs/", "permanent": false }
-  ],
-  "headers": [
-    {
-      "source": "/outputs/sw.js",
-      "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
-    },
-    {
-      "source": "/outputs/manifest.webmanifest",
-      "headers": [{ "key": "Content-Type", "value": "application/manifest+json" }]
-    }
-  ]
-}
+{"cleanUrls":true,"trailingSlash":true,"redirects":[{"source":"/","destination":"/outputs/","permanent":false}],"headers":[{"source":"/outputs/sw.js","headers":[{"key":"Cache-Control","value":"no-cache"}]},{"source":"/outputs/manifest.webmanifest","headers":[{"key":"Content-Type","value":"application/manifest+json"}]}]}  
