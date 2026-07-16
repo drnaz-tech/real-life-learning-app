@@ -1,3 +1,6 @@
+Exit code: 0
+Wall time: 2 seconds
+Output:
 # Orbit & Oak
 
 Orbit & Oak is an offline-first, mobile-first learning app prototype. It turns a child's interests into physical missions: make something, write something, notice something, then photograph it and bring it back into the app.
@@ -26,17 +29,17 @@ Every push to the connected production branch deploys automatically. Pull reques
 
 ## Product structure
 
-- `index.html` — application shell and PWA metadata links
-- `styles.css` — responsive design system for phone, tablet, and desktop layouts
-- `src/app.js` — routing, rendering, event handling, mission execution, photo capture, rewards, and parent/child flows
-- `src/data/missions.js` — all 49 mission records, four levels, seven badges, and reward definitions
-- `src/state.js` — local persistence and progress calculations
-- `src/integrations/firebase-config.example.js` — Firebase config template
-- `src/integrations/firebase-service.js` — modular Firebase Auth, Firestore, Storage, and App Check helpers
-- `firebase/firestore.rules` — family/member-aware Firestore rules
-- `firebase/storage.rules` — private, image-only mission evidence rules
-- `manifest.webmanifest` — installable app metadata
-- `sw.js` — offline app-shell caching
+- `index.html` â€” application shell and PWA metadata links
+- `styles.css` â€” responsive design system for phone, tablet, and desktop layouts
+- `src/app.js` â€” routing, rendering, event handling, mission execution, photo capture, rewards, and parent/child flows
+- `src/data/missions.js` â€” all 49 mission records, four levels, seven badges, and reward definitions
+- `src/state.js` â€” local persistence and progress calculations
+- `src/integrations/firebase-config.example.js` â€” Firebase config template
+- `src/integrations/firebase-service.js` â€” modular Firebase Auth, Firestore, Storage, and App Check helpers
+- `firebase/firestore.rules` â€” family/member-aware Firestore rules
+- `firebase/storage.rules` â€” private, image-only mission evidence rules
+- `manifest.webmanifest` â€” installable app metadata
+- `sw.js` â€” offline app-shell caching
 
 ## Included flows
 
@@ -48,7 +51,7 @@ Every push to the connected production branch deploys automatically. Pull reques
 6. Level completion rewards that a parent can approve.
 7. Parent activity log with returned mission photos.
 
-## Make it a real Firebase app
+## Legacy Firebase adapter
 
 The current UI intentionally runs without credentials and stores state locally. To move it to production:
 
@@ -81,3 +84,24 @@ Recommended production identity model:
 - Data: store `families/{familyId}`, child profile, mission progress, submissions, and approved rewards in separate subcollections. Store photo bytes in Cloud Storage and only the storage path/metadata in Firestore.
 
 Before launch, add Cloud Functions for invite-code creation/claiming, email verification and password reset UX, account deletion/export, abuse monitoring, image resizing, and parental-consent/privacy flows appropriate to the markets where children will use the app.
+
+## Recommended production backend: Supabase
+
+Orbit & Oak now includes a Supabase adapter for parent authentication, family-state sync, and private mission-photo storage. Supabase is the better fit here because the family data is relational and can be protected with Postgres Row Level Security (RLS).
+
+1. Create a Supabase project.
+2. In Authentication > Providers, enable Email, set a strong password policy, and configure the Site URL as the Vercel production URL.
+3. Open SQL Editor and run `../supabase/schema.sql`.
+4. Copy the Project URL and the publishable/anon key from Project Settings > API into `src/integrations/supabase-config.js`:
+
+   ```js
+   export const supabaseConfig = {
+     url: 'https://YOUR_PROJECT_REF.supabase.co',
+     anonKey: 'YOUR_PUBLIC_PUBLISHABLE_OR_ANON_KEY'
+   };
+   ```
+
+5. Deploy the updated `outputs` folder. Never put a Supabase service-role key in this file or in browser code.
+
+When configured, parents can create accounts, sign in, reset passwords, sync their child profile/progress, and upload mission evidence to the private `mission-evidence` bucket. The child experience remains email-free on the current device. A later cross-device child flow should use a short-lived invite code and a server-side claim function before enabling anonymous child sessions.
+
